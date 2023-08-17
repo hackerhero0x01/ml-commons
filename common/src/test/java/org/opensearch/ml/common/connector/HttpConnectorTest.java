@@ -76,7 +76,7 @@ public class HttpConnectorTest {
                 "\"parameters\":{\"input\":\"test input value\"}," +
                 "\"credential\":{\"key\":\"test_key_value\"}," +
                 "\"actions\":[{\"action_type\":\"PREDICT\",\"method\":\"POST\",\"url\":\"https://test.com\"," +
-                "\"headers\":{\"api_key\":\"${credential.key}\"},\"request_body\":\"{\\\"input\\\": \\\"${parameters.input}\\\"}\"," +
+                "\"headers\":{\"api_key\":\"${credential.key}\"},\"request_body\":\"{\\\"input\\\": ${parameters.input}}\"," +
                 "\"pre_process_function\":\"connector.pre_process.openai.embedding\"," +
                 "\"post_process_function\":\"connector.post_process.openai.embedding\"}]," +
                 "\"backend_roles\":[\"role1\",\"role2\"]," +
@@ -178,9 +178,44 @@ public class HttpConnectorTest {
         HttpConnector connector = createHttpConnector();
         Map<String, String> parameters = new HashMap<>();
         parameters.put("input", "test input value");
+        parameters.put("anotherInput", "${parameters.tests}");
         String predictPayload = connector.createPredictPayload(parameters);
         connector.validatePayload(predictPayload);
         Assert.assertEquals("{\"input\": \"test input value\"}", predictPayload);
+    }
+
+    @Test
+    public void testIsJsonCompatibleWithValidCases() {
+        HttpConnector connector = createHttpConnector();
+        Assert.assertTrue(connector.isNotPlainString("[1, 2, 3]"));
+        Assert.assertTrue(connector.isNotPlainString("{\"key\": \"value\"}"));
+        Assert.assertTrue(connector.isNotPlainString("10"));
+        Assert.assertTrue(connector.isNotPlainString("true"));
+        Assert.assertTrue(connector.isNotPlainString("false"));
+    }
+
+    @Test
+    public void testIsJsonCompatibleWithInvalidCases() {
+        HttpConnector connector = createHttpConnector();
+        Assert.assertFalse(connector.isNotPlainString("invalid"));
+        Assert.assertFalse(connector.isNotPlainString("[1, 2, 3"));
+        Assert.assertFalse(connector.isNotPlainString("{\"key\": \"value\""));
+        Assert.assertFalse(connector.isNotPlainString("not_an_integer"));
+    }
+    
+    @Test
+    public void testApplyCustomSubstitution() {
+        HttpConnector connector = createHttpConnector();
+        Map<String, String> parameters = new HashMap<>();
+        parameters.put("texts", "[\"hello world\"]");
+        parameters.put("truncate", "end");
+
+        String inputPayload = "{ \"texts\": ${parameters.texts}, \"truncate\": ${parameters.truncate} }";
+        String expectedPayload = "{ \"texts\": [\"hello world\"], \"truncate\": \"end\" }";
+
+        String result = connector.applyCustomSubstitution(parameters, inputPayload);
+
+        Assert.assertEquals(expectedPayload, result);
     }
 
     @Test
@@ -273,7 +308,7 @@ public class HttpConnectorTest {
         String url = "https://test.com";
         Map<String, String> headers = new HashMap<>();
         headers.put("api_key", "${credential.key}");
-        String requestBody = "{\"input\": \"${parameters.input}\"}";
+        String requestBody = "{\"input\": ${parameters.input}}";
         String preProcessFunction = MLPreProcessFunction.TEXT_DOCS_TO_OPENAI_EMBEDDING_INPUT;
         String postProcessFunction = MLPostProcessFunction.OPENAI_EMBEDDING;
 

@@ -65,7 +65,7 @@ public class MLConnectorGetResponseTests {
                 "\"parameters\":{\"input\":\"test input value\"},\"credential\":{\"key\":\"test_key_value\"}," +
                 "\"actions\":[{\"action_type\":\"PREDICT\",\"method\":\"POST\",\"url\":\"https://test.com\"," +
                 "\"headers\":{\"api_key\":\"${credential.key}\"}," +
-                "\"request_body\":\"{\\\"input\\\": \\\"${parameters.input}\\\"}\"," +
+                "\"request_body\":\"{\\\"input\\\": ${parameters.input}}\"," +
                 "\"pre_process_function\":\"connector.pre_process.openai.embedding\"," +
                 "\"post_process_function\":\"connector.post_process.openai.embedding\"}]," +
                 "\"backend_roles\":[\"role1\",\"role2\"]," +

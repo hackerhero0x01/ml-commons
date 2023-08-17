@@ -95,7 +95,7 @@ public class AwsConnectorExecutorTest {
                 .actionType(ConnectorAction.ActionType.PREDICT)
                 .method("POST")
                 .url("http://test.com/mock")
-                .requestBody("{\"input\": \"${parameters.input}\"}")
+                .requestBody("{\"input\": ${parameters.input}}")
                 .build();
         Map<String, String> credential = ImmutableMap.of(ACCESS_KEY_FIELD, encryptor.encrypt("test_key"), SECRET_KEY_FIELD, encryptor.encrypt("test_secret_key"));
         Map<String, String> parameters = ImmutableMap.of(REGION_FIELD, "us-west-2", SERVICE_NAME_FIELD, "sagemaker");
@@ -120,7 +120,7 @@ public class AwsConnectorExecutorTest {
                 .actionType(ConnectorAction.ActionType.PREDICT)
                 .method("POST")
                 .url("http://test.com/mock")
-                .requestBody("{\"input\": \"${parameters.input}\"}")
+                .requestBody("{\"input\": ${parameters.input}}")
                 .build();
         Map<String, String> credential = ImmutableMap.of(ACCESS_KEY_FIELD, encryptor.encrypt("test_key"), SECRET_KEY_FIELD, encryptor.encrypt("test_secret_key"));
         Map<String, String> parameters = ImmutableMap.of(REGION_FIELD, "us-west-2", SERVICE_NAME_FIELD, "sagemaker");
