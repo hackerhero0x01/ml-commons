@@ -53,7 +53,7 @@ public class RestMLRemoteInferenceIT extends MLCommonsRestTestCase {
         + "       \"headers\": {\n"
         + "          \"Authorization\": \"Bearer ${credential.openAI_key}\"\n"
         + "       },\n"
-        + "       \"request_body\": \"{ \\\"model\\\": \\\"${parameters.model}\\\", \\\"prompt\\\": \\\"${parameters.prompt}\\\",  \\\"max_tokens\\\": ${parameters.max_tokens},  \\\"temperature\\\": ${parameters.temperature} }\"\n"
+        + "       \"request_body\": \"{ \\\"model\\\": ${parameters.model}, \\\"prompt\\\": ${parameters.prompt},  \\\"max_tokens\\\": ${parameters.max_tokens},  \\\"temperature\\\": ${parameters.temperature} }\"\n"
         + "      }\n"
         + "  ]\n"
         + "}";
@@ -221,7 +221,7 @@ public class RestMLRemoteInferenceIT extends MLCommonsRestTestCase {
             + "          \"headers\": { \n"
             + "            \"Authorization\": \"Bearer ${credential.openAI_key}\"\n"
             + "          },\n"
-            + "          \"request_body\": \"{ \\\"model\\\": \\\"${parameters.model}\\\", \\\"messages\\\": ${parameters.messages} }\"\n"
+            + "          \"request_body\": \"{ \\\"model\\\": ${parameters.model}, \\\"messages\\\": ${parameters.messages} }\"\n"
             + "      }\n"
             + "  ]\n"
             + "}";
@@ -279,7 +279,7 @@ public class RestMLRemoteInferenceIT extends MLCommonsRestTestCase {
             + "          \"headers\": { \n"
             + "          \"Authorization\": \"Bearer ${credential.openAI_key}\"\n"
             + "          },\n"
-            + "          \"request_body\": \"{ \\\"model\\\": \\\"${parameters.model}\\\", \\\"input\\\": \\\"${parameters.input}\\\",  \\\"instruction\\\": \\\"${parameters.instruction}\\\"  }\"\n"
+            + "          \"request_body\": \"{ \\\"model\\\": ${parameters.model}, \\\"input\\\": ${parameters.input},  \\\"instruction\\\": ${parameters.instruction}  }\"\n"
             + "      }\n"
             + "  ]\n"
             + "}";
@@ -348,7 +348,7 @@ public class RestMLRemoteInferenceIT extends MLCommonsRestTestCase {
             + "          \"headers\": { \n"
             + "          \"Authorization\": \"Bearer ${credential.openAI_key}\"\n"
             + "          },\n"
-            + "          \"request_body\": \"{ \\\"input\\\": \\\"${parameters.input}\\\" }\"\n"
+            + "          \"request_body\": \"{ \\\"input\\\": ${parameters.input} }\"\n"
             + "      }\n"
             + "  ]\n"
             + "}";
@@ -415,7 +415,7 @@ public class RestMLRemoteInferenceIT extends MLCommonsRestTestCase {
             + "          \"headers\": { \n"
             + "          \"Authorization\": \"Bearer ${credential.openAI_key}\"\n"
             + "          },\n"
-            + "          \"request_body\": \"{ \\\"model\\\": \\\"${parameters.model}\\\",   \\\"input\\\": \\\"${parameters.input}\\\" }\",\n"
+            + "          \"request_body\": \"{ \\\"model\\\": ${parameters.model},   \\\"input\\\": ${parameters.input} }\",\n"
             + "          \"pre_process_function\": \"text_docs_to_openai_embedding_input\",\n"
             + "          \"post_process_function\": \"openai_embedding\"\n"
             + "      }\n"
@@ -477,7 +477,7 @@ public class RestMLRemoteInferenceIT extends MLCommonsRestTestCase {
             + "          \"headers\": { \n"
             + "          \"Authorization\": \"Bearer ${credential.cohere_key}\"\n"
             + "          },\n"
-            + "          \"request_body\": \"{ \\\"max_tokens\\\": ${parameters.max_tokens}, \\\"return_likelihoods\\\": \\\"NONE\\\", \\\"truncate\\\": \\\"END\\\", \\\"prompt\\\": \\\"${parameters.prompt}\\\" }\"\n"
+            + "          \"request_body\": \"{ \\\"max_tokens\\\": ${parameters.max_tokens}, \\\"return_likelihoods\\\": \\\"NONE\\\", \\\"truncate\\\": \\\"END\\\", \\\"prompt\\\": ${parameters.prompt} }\"\n"
             + "      }\n"
             + "  ]\n"
             + "}";

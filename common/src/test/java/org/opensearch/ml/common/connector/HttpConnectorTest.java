@@ -202,7 +202,7 @@ public class HttpConnectorTest {
         Assert.assertFalse(connector.isNotPlainString("{\"key\": \"value\""));
         Assert.assertFalse(connector.isNotPlainString("not_an_integer"));
     }
-    
+
     @Test
     public void testApplyCustomSubstitution() {
         HttpConnector connector = createHttpConnector();
