@@ -85,7 +85,7 @@ public class HttpJsonConnectorExecutorTest {
                 .actionType(ConnectorAction.ActionType.PREDICT)
                 .method("POST")
                 .url("http://test.com/mock")
-                .requestBody("{\"input\": \"${parameters.input}\"}")
+                .requestBody("{\"input\": ${parameters.input}}")
                 .build();
         Connector connector = HttpConnector.builder().name("test connector").version("1").protocol("http").actions(Arrays.asList(predictAction)).build();
         HttpJsonConnectorExecutor executor = spy(new HttpJsonConnectorExecutor(connector));

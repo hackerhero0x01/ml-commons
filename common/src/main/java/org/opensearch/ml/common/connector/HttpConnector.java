@@ -9,7 +9,8 @@ import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 import lombok.extern.log4j.Log4j2;
-import org.apache.commons.text.StringSubstitutor;
+import org.json.JSONArray;
+import org.json.JSONObject;
 import org.opensearch.common.io.stream.BytesStreamOutput;
 import org.opensearch.common.io.stream.StreamInput;
 import org.opensearch.common.io.stream.StreamOutput;
@@ -34,6 +35,7 @@ import static org.opensearch.ml.common.connector.ConnectorProtocols.HTTP;
 import static org.opensearch.ml.common.connector.ConnectorProtocols.validateProtocol;
 import static org.opensearch.ml.common.utils.StringUtils.getParameterMap;
 import static org.opensearch.ml.common.utils.StringUtils.isJson;
+import org.apache.commons.text.StringEscapeUtils;
 
 @Log4j2
 @NoArgsConstructor
@@ -254,14 +256,71 @@ public class HttpConnector extends AbstractConnector {
         if (predictAction.isPresent() && predictAction.get().getRequestBody() != null) {
             String payload = predictAction.get().getRequestBody();
             payload = fillNullParameters(parameters, payload);
-            StringSubstitutor substitutor = new StringSubstitutor(parameters, "${parameters.", "}");
-            payload = substitutor.replace(payload);
+            payload = applyCustomSubstitution(parameters, payload);
             if (!isJson(payload)) {
                 throw new IllegalArgumentException("Invalid JSON in payload");
             }
             return (T) payload;
         }
         return (T) parameters.get("http_body");
+    }
+
+    protected String applyCustomSubstitution(Map<String, String> parameters, String inputPayload) {
+
+        if (parameters == null) {
+            throw new IllegalArgumentException("Some parameter placeholder not filled in payload: input");
+        }
+        String result = inputPayload;
+
+        Pattern pattern = Pattern.compile("\\$\\{parameters\\.(\\w+)\\}");
+        Matcher matcher = pattern.matcher(inputPayload);
+
+        while (matcher.find()) {
+            String paramName = matcher.group(1);
+            String paramValue = parameters.get(paramName);
+            if (paramValue != null) {
+                String modifiedValue = isNotPlainString(paramValue) ? paramValue : "\"" + paramValue + "\"";
+                result = result.replace("${parameters." + paramName + "}", modifiedValue);
+            }
+        }
+
+        result = StringEscapeUtils.unescapeJava(result); // Unescape Unicode escape sequences
+
+        return result;
+    }
+
+    protected boolean isNotPlainString(String value) {
+        if (value == null || value.isEmpty()) {
+            return false;
+        }
+
+        // Regular expression pattern for a number
+        String numberPattern = "[-+]?\\d+(\\.\\d+)?([eE][-+]?\\d+)?";
+
+        if (value.matches(numberPattern)) {
+            return true;
+        }
+
+        try {
+            // Check if it's a JSON array
+            if (value.startsWith("[") && value.endsWith("]")) {
+                new JSONArray(value);
+                return true;
+            }
+
+            // Check if it's a JSON object
+            if (value.startsWith("{") && value.endsWith("}")) {
+                new JSONObject(value);
+                return true;
+            }
+
+            // Check if it's a boolean
+            return value.equalsIgnoreCase("true") || value.equalsIgnoreCase("false");
+
+            // If none of the above, consider it as a string
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     protected String fillNullParameters(Map<String, String> parameters, String payload) {
