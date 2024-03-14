@@ -8,24 +8,12 @@ package org.opensearch.ml.engine.algorithms.agent;
 import static org.opensearch.ml.common.conversation.ActionConstants.ADDITIONAL_INFO_FIELD;
 import static org.opensearch.ml.common.conversation.ActionConstants.AI_RESPONSE_FIELD;
 import static org.opensearch.ml.common.utils.StringUtils.gson;
-import static org.opensearch.ml.engine.algorithms.agent.AgentUtils.DISABLE_TRACE;
-import static org.opensearch.ml.engine.algorithms.agent.AgentUtils.PROMPT_CHAT_HISTORY_PREFIX;
-import static org.opensearch.ml.engine.algorithms.agent.AgentUtils.PROMPT_PREFIX;
-import static org.opensearch.ml.engine.algorithms.agent.AgentUtils.PROMPT_SUFFIX;
-import static org.opensearch.ml.engine.algorithms.agent.AgentUtils.RESPONSE_FORMAT_INSTRUCTION;
-import static org.opensearch.ml.engine.algorithms.agent.AgentUtils.TOOL_RESPONSE;
-import static org.opensearch.ml.engine.algorithms.agent.AgentUtils.VERBOSE;
-import static org.opensearch.ml.engine.algorithms.agent.AgentUtils.constructToolParams;
-import static org.opensearch.ml.engine.algorithms.agent.AgentUtils.createTools;
-import static org.opensearch.ml.engine.algorithms.agent.AgentUtils.getMessageHistoryLimit;
-import static org.opensearch.ml.engine.algorithms.agent.AgentUtils.getMlToolSpecs;
-import static org.opensearch.ml.engine.algorithms.agent.AgentUtils.getToolName;
-import static org.opensearch.ml.engine.algorithms.agent.AgentUtils.getToolNames;
-import static org.opensearch.ml.engine.algorithms.agent.AgentUtils.outputToOutputString;
-import static org.opensearch.ml.engine.algorithms.agent.AgentUtils.parseLLMOutput;
-import static org.opensearch.ml.engine.algorithms.agent.PromptTemplate.CHAT_HISTORY_PREFIX;
+import static org.opensearch.ml.engine.algorithms.agent.AgentUtils.*;
+import static org.opensearch.ml.engine.algorithms.agent.PromptTemplate.*;
 
+import java.security.AccessController;
 import java.security.PrivilegedActionException;
+import java.security.PrivilegedExceptionAction;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -95,6 +83,7 @@ public class MLChatAgentRunner implements MLAgentRunner {
     public static final String ACTION_INPUT = "action_input";
     public static final String FINAL_ANSWER = "final_answer";
     public static final String THOUGHT_RESPONSE = "thought_response";
+    public static final String EMPTY_LABEL = "empty";
 
     private Client client;
     private Settings settings;
@@ -175,7 +164,7 @@ public class MLChatAgentRunner implements MLAgentRunner {
         Map<String, MLToolSpec> toolSpecMap = new HashMap<>();
         createTools(toolFactories, params, toolSpecs, tools, toolSpecMap);
 
-        runReAct(mlAgent.getLlm(), tools, toolSpecMap, params, memory, sessionId, listener);
+        runReAct(mlAgent.getLlm(), tools, toolSpecMap, params, memory, sessionId, listener, mlAgent.getParameters());
     }
 
     private void runReAct(
@@ -185,7 +174,8 @@ public class MLChatAgentRunner implements MLAgentRunner {
         Map<String, String> parameters,
         Memory memory,
         String sessionId,
-        ActionListener<Object> listener
+        ActionListener<Object> listener,
+        Map<String, String> agentParameters
     ) {
         Map<String, String> tmpParameters = constructLLMParams(llm, parameters);
         String prompt = constructLLMPrompt(tools, tmpParameters);
@@ -230,9 +220,12 @@ public class MLChatAgentRunner implements MLAgentRunner {
                 if (finalI % 2 == 0) {
                     MLTaskResponse llmResponse = (MLTaskResponse) output;
                     ModelTensorOutput tmpModelTensorOutput = (ModelTensorOutput) llmResponse.getOutput();
-                    List<String> llmResponsePatterns = gson.fromJson(tmpParameters.get("llm_response_pattern"), List.class);
-                    Map<String, String> modelOutput = parseLLMOutput(tmpModelTensorOutput, llmResponsePatterns, tools.keySet());
-
+                    Map<String, String> modelOutput = (Map<String, String>) tmpModelTensorOutput
+                        .getMlModelOutputs()
+                        .get(0)
+                        .getMlModelTensors()
+                        .get(0)
+                        .getDataAsMap();
                     String thought = String.valueOf(modelOutput.get(THOUGHT));
                     String action = String.valueOf(modelOutput.get(ACTION));
                     String actionInput = String.valueOf(modelOutput.get(ACTION_INPUT));
@@ -365,15 +358,15 @@ public class MLChatAgentRunner implements MLAgentRunner {
                             listener.onResponse(ModelTensorOutput.builder().mlModelOutputs(finalModelTensors).build());
                         }
                     } else {
-                        ActionRequest request = new MLPredictionTaskRequest(
-                            llm.getModelId(),
-                            RemoteInferenceMLInput
-                                .builder()
-                                .algorithm(FunctionName.REMOTE)
-                                .inputDataset(RemoteInferenceInputDataSet.builder().parameters(tmpParameters).build())
-                                .build()
+                        getNextStep(
+                            llm,
+                            tmpParameters,
+                            parameters,
+                            (ActionListener<MLTaskResponse>) nextStepListener,
+                            tools,
+                            scratchpadBuilder,
+                            agentParameters
                         );
-                        client.execute(MLPredictionTaskAction.INSTANCE, request, (ActionListener<MLTaskResponse>) nextStepListener);
                     }
                 }
             }, e -> {
@@ -385,15 +378,147 @@ public class MLChatAgentRunner implements MLAgentRunner {
             }
         }
 
-        ActionRequest request = new MLPredictionTaskRequest(
-            llm.getModelId(),
-            RemoteInferenceMLInput
-                .builder()
-                .algorithm(FunctionName.REMOTE)
-                .inputDataset(RemoteInferenceInputDataSet.builder().parameters(tmpParameters).build())
-                .build()
-        );
-        client.execute(MLPredictionTaskAction.INSTANCE, request, firstListener);
+        getNextStep(llm, tmpParameters, parameters, firstListener, tools, scratchpadBuilder, agentParameters);
+
+    }
+
+    private void getNextStep(
+        LLMSpec llm,
+        Map<String, String> tmpParameters,
+        Map<String, String> parameters,
+        ActionListener<MLTaskResponse> nextListener,
+        Map<String, Tool> tools,
+        StringBuilder scratchpadBuilder,
+        Map<String, String> agentParameters
+    ) {
+        String toolSeletctionType = "original";
+        String toolSelectionModelId;
+        if (agentParameters != null && agentParameters.containsKey("tool_selection")) {
+            Map<String, String> toolSelectionConfig = gson.fromJson(agentParameters.get("tool_selection"), Map.class);
+            toolSeletctionType = toolSelectionConfig.getOrDefault("type", "original");
+            toolSelectionModelId = toolSelectionConfig.getOrDefault("model_id", "");
+
+        } else {
+            toolSelectionModelId = "";
+        }
+        if (toolSeletctionType.equals("original")) {
+            ActionRequest request = new MLPredictionTaskRequest(
+                llm.getModelId(),
+                RemoteInferenceMLInput
+                    .builder()
+                    .algorithm(FunctionName.REMOTE)
+                    .inputDataset(RemoteInferenceInputDataSet.builder().parameters(tmpParameters).build())
+                    .build()
+            );
+            client.execute(MLPredictionTaskAction.INSTANCE, request, ActionListener.wrap(output -> {
+                MLTaskResponse llmResponse = (MLTaskResponse) output;
+                ModelTensorOutput tmpModelTensorOutput = (ModelTensorOutput) llmResponse.getOutput();
+                List<String> llmResponsePatterns = gson.fromJson(parameters.get("llm_response_pattern"), List.class);
+                Map<String, String> modelOutput = parseLLMOutput(tmpModelTensorOutput, llmResponsePatterns, tools.keySet());
+                nextListener.onResponse(constructNextStepResponseFromMap(modelOutput));
+            }, nextListener::onFailure));
+        } else {
+            tmpParameters.put("prompt.format_instruction", PROMPT_FORMAT_INSTRUCTION_FOR_THOUGHT_EXTRACT);
+            tmpParameters.put("prompt.suffix", PROMPT_TEMPLATE_SUFFIX_FOR_THOUGHT_EXTRACT);
+            tmpParameters.remove(PROMPT);
+            String thuoghtPrompt = constructLLMPrompt(tools, tmpParameters);
+            StringSubstitutor tmpSubstitutor = new StringSubstitutor(
+                Map.of(SCRATCHPAD, scratchpadBuilder.toString()),
+                "${parameters.",
+                "}"
+            );
+            tmpParameters.put("prompt", tmpSubstitutor.replace(thuoghtPrompt));
+            Map<String, String> nextStepOutput = new HashMap<>();
+            ActionRequest thoughtRequest = new MLPredictionTaskRequest(
+                llm.getModelId(),
+                RemoteInferenceMLInput
+                    .builder()
+                    .algorithm(FunctionName.REMOTE)
+                    .inputDataset(RemoteInferenceInputDataSet.builder().parameters(tmpParameters).build())
+                    .build()
+            );
+            client.execute(MLPredictionTaskAction.INSTANCE, thoughtRequest, ActionListener.<MLTaskResponse>wrap(thoughtOutput -> {
+                ModelTensorOutput thoughtModelTensorOutput = (ModelTensorOutput) thoughtOutput.getOutput();
+                Map<String, String> thoughtMap = parseLLMOutput(
+                    thoughtModelTensorOutput,
+                    gson.fromJson(parameters.get("llm_response_pattern"), List.class),
+                        tools.keySet()
+                );
+                if (thoughtMap.containsKey(FINAL_ANSWER)) {
+                    nextStepOutput.put(THOUGHT, thoughtMap.getOrDefault(THOUGHT, ""));
+                    nextStepOutput.put(FINAL_ANSWER, thoughtMap.get(FINAL_ANSWER));
+                    nextStepOutput.put(THOUGHT_RESPONSE, gson.toJson(nextStepOutput));
+                    nextListener.onResponse(constructNextStepResponseFromMap(nextStepOutput));
+                } else {
+                    String thought = thoughtMap.get(THOUGHT);
+                    nextStepOutput.put(THOUGHT, thought);
+                    Map<String, String> nameToType = new HashMap<>();
+                    for (Map.Entry<String, Tool> entry : tools.entrySet()) {
+                        nameToType.put(entry.getKey(), entry.getValue().getType());
+                    }
+                    String questionString = AccessController
+                        .doPrivileged((PrivilegedExceptionAction<String>) () -> gson.toJson(List.of(thought)));
+                    String nameToTypeString = AccessController
+                        .doPrivileged((PrivilegedExceptionAction<String>) () -> gson.toJson(nameToType));
+                    ActionRequest getActionRequest = new MLPredictionTaskRequest(
+                        toolSelectionModelId,
+                        RemoteInferenceMLInput
+                            .builder()
+                            .algorithm(FunctionName.REMOTE)
+                            .inputDataset(
+                                RemoteInferenceInputDataSet
+                                    .builder()
+                                    .parameters(ImmutableMap.of("questions", questionString, "nameToType", nameToTypeString))
+                                    .build()
+                            )
+                            .build()
+                    );
+                    client.execute(MLPredictionTaskAction.INSTANCE, getActionRequest, ActionListener.<MLTaskResponse>wrap(actionOutput -> {
+                        ModelTensorOutput actionModelTensorOutput = (ModelTensorOutput) actionOutput.getOutput();
+                        String action = (String) actionModelTensorOutput
+                            .getMlModelOutputs()
+                            .get(0)
+                            .getMlModelTensors()
+                            .get(0)
+                            .getDataAsMap()
+                            .get("response");
+
+                        nextStepOutput.put(ACTION, action);
+                        tmpParameters.put("prompt.format_instruction", PROMPT_FORMAT_INSTRUCTION_FOR_ACTION_INPUT);
+                        tmpParameters.put("prompt.suffix", PROMPT_TEMPLATE_SUFFIX_FOR_ACTION_INPUT);
+                        tmpParameters.put("current_thought", thought);
+                        tmpParameters.remove(PROMPT);
+                        String actionPrompt = constructLLMPrompt(ImmutableMap.of(action, tools.get(action)), tmpParameters);
+                        tmpParameters.put("prompt", tmpSubstitutor.replace(actionPrompt));
+                        ActionRequest getActionInputRequest = new MLPredictionTaskRequest(
+                            llm.getModelId(),
+                            RemoteInferenceMLInput
+                                .builder()
+                                .algorithm(FunctionName.REMOTE)
+                                .inputDataset(RemoteInferenceInputDataSet.builder().parameters(tmpParameters).build())
+                                .build()
+                        );
+                        client
+                            .execute(
+                                MLPredictionTaskAction.INSTANCE,
+                                getActionInputRequest,
+                                ActionListener.<MLTaskResponse>wrap(actionInputOutput -> {
+                                    ModelTensorOutput actionInputModelTensorOutput = (ModelTensorOutput) actionInputOutput.getOutput();
+                                    String actionInput = (String) parseLLMOutput(
+                                        actionInputModelTensorOutput,
+                                        gson.fromJson(parameters.get("llm_response_pattern"), List.class),
+                                        tools.keySet()
+                                    ).get(ACTION_INPUT);
+                                    nextStepOutput.put(ACTION_INPUT, actionInput);
+                                    nextStepOutput.put(THOUGHT_RESPONSE, gson.toJson(nextStepOutput));
+                                    nextListener.onResponse(constructNextStepResponseFromMap(nextStepOutput));
+                                }, nextListener::onFailure)
+                            );
+                    }, nextListener::onFailure));
+                }
+            }, nextListener::onFailure));
+        }
+
     }
 
     private static List<ModelTensors> createFinalAnswerTensors(List<ModelTensors> sessionId, List<ModelTensor> lastThought) {

@@ -10,17 +10,7 @@ import static org.opensearch.ml.common.utils.StringUtils.gson;
 import static org.opensearch.ml.common.utils.StringUtils.isJson;
 import static org.opensearch.ml.common.utils.StringUtils.toJson;
 import static org.opensearch.ml.engine.algorithms.agent.MLAgentExecutor.MESSAGE_HISTORY_LIMIT;
-import static org.opensearch.ml.engine.algorithms.agent.MLChatAgentRunner.ACTION;
-import static org.opensearch.ml.engine.algorithms.agent.MLChatAgentRunner.ACTION_INPUT;
-import static org.opensearch.ml.engine.algorithms.agent.MLChatAgentRunner.CHAT_HISTORY;
-import static org.opensearch.ml.engine.algorithms.agent.MLChatAgentRunner.CONTEXT;
-import static org.opensearch.ml.engine.algorithms.agent.MLChatAgentRunner.EXAMPLES;
-import static org.opensearch.ml.engine.algorithms.agent.MLChatAgentRunner.FINAL_ANSWER;
-import static org.opensearch.ml.engine.algorithms.agent.MLChatAgentRunner.OS_INDICES;
-import static org.opensearch.ml.engine.algorithms.agent.MLChatAgentRunner.THOUGHT;
-import static org.opensearch.ml.engine.algorithms.agent.MLChatAgentRunner.THOUGHT_RESPONSE;
-import static org.opensearch.ml.engine.algorithms.agent.MLChatAgentRunner.TOOL_DESCRIPTIONS;
-import static org.opensearch.ml.engine.algorithms.agent.MLChatAgentRunner.TOOL_NAMES;
+import static org.opensearch.ml.engine.algorithms.agent.MLChatAgentRunner.*;
 import static org.opensearch.ml.engine.memory.ConversationIndexMemory.LAST_N_INTERACTIONS;
 
 import java.security.AccessController;
@@ -44,7 +34,9 @@ import org.opensearch.ml.common.agent.MLAgent;
 import org.opensearch.ml.common.agent.MLToolSpec;
 import org.opensearch.ml.common.output.model.ModelTensor;
 import org.opensearch.ml.common.output.model.ModelTensorOutput;
+import org.opensearch.ml.common.output.model.ModelTensors;
 import org.opensearch.ml.common.spi.tools.Tool;
+import org.opensearch.ml.common.transport.MLTaskResponse;
 import org.opensearch.ml.common.utils.StringUtils;
 
 import lombok.extern.log4j.Log4j2;
@@ -221,7 +213,7 @@ public class AgentUtils {
                 modelOutput.remove(ACTION);
             }
         }
-        if (!modelOutput.containsKey(ACTION) && !modelOutput.containsKey(FINAL_ANSWER)) {
+        if (!modelOutput.containsKey(ACTION) && !modelOutput.containsKey(FINAL_ANSWER) && !modelOutput.containsKey(EMPTY_LABEL)) {
             modelOutput.put(FINAL_ANSWER, modelOutput.get(THOUGHT_RESPONSE));
         }
         return modelOutput;
@@ -453,6 +445,13 @@ public class AgentUtils {
             inputTools.add(toolName);
         }
         return inputTools;
+    }
+
+    public static MLTaskResponse constructNextStepResponseFromMap(Map<String, String> map) {
+        ModelTensor modelTensor = new ModelTensor("nextOutput", null, null, null, null, null, map);
+        ModelTensors modelTensors = new ModelTensors(List.of(modelTensor));
+        ModelTensorOutput modelTensorOutput = new ModelTensorOutput(List.of(modelTensors));
+        return MLTaskResponse.builder().output(modelTensorOutput).build();
     }
 
     public static Map<String, String> constructToolParams(
