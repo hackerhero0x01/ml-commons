@@ -29,6 +29,8 @@ public class LlmIOUtil {
 
     private static final String BEDROCK_PROVIDER_PREFIX = "bedrock/";
 
+    private static final String OCI_GENAI_PROVIDER_PREFIX = "oci_genai/";
+
     public static ChatCompletionInput createChatCompletionInput(
         String llmModel,
         String question,
@@ -63,6 +65,11 @@ public class LlmIOUtil {
         if (llmModel != null && llmModel.startsWith(BEDROCK_PROVIDER_PREFIX)) {
             provider = Llm.ModelProvider.BEDROCK;
         }
+
+        if (llmModel != null && llmModel.startsWith(OCI_GENAI_PROVIDER_PREFIX)) {
+            provider = Llm.ModelProvider.OCI_GENAI;
+        }
+
         return new ChatCompletionInput(
             llmModel,
             question,

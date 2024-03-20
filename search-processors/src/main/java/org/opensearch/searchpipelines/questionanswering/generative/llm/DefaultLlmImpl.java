@@ -118,6 +118,17 @@ public class DefaultLlmImpl implements Llm {
                             chatCompletionInput.getContexts()
                         )
                 );
+        } else if (chatCompletionInput.getModelProvider() == ModelProvider.OCI_GENAI) {
+            inputParameters
+                .put(
+                    "prompt",
+                    PromptUtil
+                        .buildSingleStringPromptForOciGenAi(
+                            chatCompletionInput.getQuestion(),
+                            chatCompletionInput.getChatHistory(),
+                            chatCompletionInput.getContexts()
+                        )
+                );
         } else {
             throw new IllegalArgumentException("Unknown/unsupported model provider: " + chatCompletionInput.getModelProvider());
         }
@@ -157,6 +168,27 @@ public class DefaultLlmImpl implements Llm {
                 Map error = (Map) dataAsMap.get("error");
                 if (error != null) {
                     errors = List.of((String) error.get("message"));
+                } else {
+                    errors = List.of("Unknown error or response.");
+                }
+            }
+        } else if (provider == ModelProvider.OCI_GENAI) {
+            final Map inferenceResponse = (Map) dataAsMap.get("inferenceResponse");
+            log.debug("OCI genai inferenceResponse response: {}", inferenceResponse);
+            // OCI GENAI successful response format: { inferenceResponse: { generatedTexts: [{text: "answer"}] }}
+            // OCI GENAI failure response format: {"code": "errorCode", "message": "errorMessage"}
+            if (inferenceResponse != null) {
+                final List choices = (List) inferenceResponse.get("generatedTexts");
+                if (choices == null || choices.isEmpty()) {
+                    errors = List.of("Missing answer");
+                } else {
+                    final Map firstChoice = (Map) choices.get(0);
+                    answers = List.of(firstChoice.get("text"));
+                }
+            } else {
+                final Map error = (Map) dataAsMap.get(CONNECTOR_OUTPUT_ERROR);
+                if (error != null) {
+                    errors = List.of((String) error.get(CONNECTOR_OUTPUT_MESSAGE));
                 } else {
                     errors = List.of("Unknown error or response.");
                 }
