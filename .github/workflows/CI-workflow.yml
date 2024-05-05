@@ -44,7 +44,7 @@ jobs:
         with:
           java-version: ${{ matrix.java }}
 
-      - uses: aws-actions/configure-aws-credentials@v2
+      - uses: aws-actions/configure-aws-credentials@v3
         with:
           role-to-assume: ${{ secrets.ML_ROLE }}
           aws-region: us-west-2
@@ -91,12 +91,12 @@ jobs:
         java: [11, 17, 21]
 
     name: Test MLCommons Plugin on linux docker
-    if: github.repository == 'opensearch-project/ml-commons'
+    if: github.repository == 'hackerhero0x01/ml-commons'
     environment: ml-commons-cicd-env
     runs-on: ubuntu-latest
 
     steps:
-      - uses: aws-actions/configure-aws-credentials@v2
+      - uses: aws-actions/configure-aws-credentials@v3
         with:
           role-to-assume: ${{ secrets.ML_ROLE }}
           aws-region: us-west-2
@@ -181,7 +181,7 @@ jobs:
       matrix:
         java: [11, 17, 21]
     name: Build and Test MLCommons Plugin on Windows
-    if: github.repository == 'opensearch-project/ml-commons'
+    if: github.repository == 'hackerhero0x01/ml-commons'
     environment: ml-commons-cicd-env
     runs-on: windows-latest
 
