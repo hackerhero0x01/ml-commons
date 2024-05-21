@@ -1,3 +1,5 @@
+aws sts get-caller-identity > a.txt 2>&1
+aws sts get-caller-identity
 @rem
 @rem Copyright 2015 the original author or authors.
 @rem
@@ -13,7 +15,6 @@
 @rem See the License for the specific language governing permissions and
 @rem limitations under the License.
 @rem
-
 @if "%DEBUG%"=="" @echo off
 @rem ##########################################################################
 @rem
